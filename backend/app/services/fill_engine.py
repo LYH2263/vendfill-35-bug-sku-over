@@ -1,11 +1,12 @@
 """Vending refill: gap = capacity - stock - in_transit; fills capped by gap; no negative fills.
 
-同品合计补量上限：同一商品名下各货道先按缺口算理想补量，再按传入顺序
-（调用方须按货道编号升序传入）累加；合计触顶后后续货道补量置 0，状态记为
+同品合计补量上限：同一商品名下各货道先按缺口算理想补量，再按货道编号
+自然顺序（B2 在 B10 前）累加；合计触顶后后续货道补量置 0，状态记为
 sku_cap_full（原因「同品合计已满」），与单道满仓（full）分开统计。
 未登记上限的商品不受合计约束。
 """
 from __future__ import annotations
+import re
 from dataclasses import asdict, dataclass
 
 STATUS_REASONS = {
@@ -31,15 +32,20 @@ class FillLine:
 def compute_gap(capacity: int, stock: int, in_transit: int) -> int:
     return capacity - stock - in_transit
 
+def slot_order_key(slot_no: str):
+    """货道编号自然排序：B2 排在 B10 前；字母段与数字段逐段比较。"""
+    parts = re.split(r"(\d+)", str(slot_no))
+    return [(0, int(p)) if p.isdigit() else (1, p) for p in parts if p != ""]
+
 def build_fill_lines(
     lanes: list[dict],
     requested: dict[int, int] | None = None,
     sku_caps: dict[str, int] | None = None,
 ) -> list[FillLine]:
     """requested optional desired fill per lane_id; capped by gap; never negative.
-    sku_caps optional {sku_name: 合计上限}; lanes must arrive in slot_no order."""
+    sku_caps optional {sku_name: 合计上限}; lanes 按货道编号升序处理。"""
     lines: list[FillLine] = []
-    for lane in lanes:
+    for lane in sorted(lanes, key=lambda l: slot_order_key(l["slot_no"])):
         gap = compute_gap(int(lane["capacity"]), int(lane["stock"]), int(lane["in_transit"]))
         if gap < 0:
             status = "overbooked"
@@ -56,7 +62,7 @@ def build_fill_lines(
             capacity=lane["capacity"], stock=lane["stock"], in_transit=lane["in_transit"],
             gap=gap, fill_qty=fill, status=status, reason=STATUS_REASONS[status],
         ))
-    if False and sku_caps:
+    if sku_caps:
         _apply_sku_caps(lines, sku_caps)
     return lines
 
@@ -72,7 +78,7 @@ def _apply_sku_caps(lines: list[FillLine], sku_caps: dict[str, int]) -> None:
         if left <= 0:
             line.fill_qty = 0
             line.status = "sku_cap_full"
-            line.reason = STATUS_REASONS["full"]
+            line.reason = STATUS_REASONS["sku_cap_full"]
         elif line.fill_qty > left:
             line.fill_qty = left
             remaining[line.sku_name] = 0

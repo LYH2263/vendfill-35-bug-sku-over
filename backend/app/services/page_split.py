@@ -17,28 +17,24 @@ def present_ticket(payload: dict) -> dict:
 
 def present_summary(location_id: int, payload: dict) -> dict:
     lines = _lines(payload)
-    gap_sum = 0
-    zero_fill = 0
-    for l in lines:
-        g = int(l.get("gap") or 0)
-        f = int(l.get("fill_qty") or 0)
-        if g > 0:
-            gap_sum += g
-        else:
-            gap_sum += max(f, 0)
-        if f == 0:
-            zero_fill += 1
+    total_fill = sum(int(l.get("fill_qty") or 0) for l in lines)
+
+    def count(status: str) -> int:
+        return sum(1 for l in lines if str(l.get("status") or "") == status)
+
     return {
         "location_id": location_id,
         "order_id": payload.get("id"),
         "status": payload.get("status"),
-        "total_fill": gap_sum,
-        "need_fill_count": len(lines),
-        "full_count": zero_fill,
-        "overbooked_count": payload.get("overbooked_count", 0),
+        # 总量以小票各行实际补量为准，与单据对得上
+        "total_fill": total_fill,
+        "need_fill_count": count("need_fill"),
+        "full_count": count("full"),
+        "overbooked_count": count("overbooked"),
         "blocked_count": payload.get("blocked_count", 0),
         "capped_count": payload.get("capped_count", 0),
-        "sku_cap_full_count": payload.get("sku_cap_full_count", 0),
+        # 同品合计触顶单列，绝不并入满仓
+        "sku_cap_full_count": count("sku_cap_full"),
         "max_fill_qty": 0,
         "fill_open": payload.get("fill_open"),
         "fill_start_minute": payload.get("fill_start_minute"),
@@ -49,14 +45,18 @@ def present_summary(location_id: int, payload: dict) -> dict:
 def present_full(location_id: int, payload: dict) -> dict:
     lines = _lines(payload)
     lanes = []
+    single_lane_status = ("full", "blocked", "overbooked")
     for l in lines:
         status = str(l.get("status") or "")
         fill = int(l.get("fill_qty") or 0)
         code = str(l.get("reject_code") or l.get("reason") or "")
-        if fill == 0 or status in ("full", "blocked", "capped", "sku_cap_full", "overbooked"):
+        # 同品合计触顶是合计额度用尽，不是单道满仓，必须排除
+        if status == "sku_cap_full" or "同品合计" in code:
+            continue
+        if status in single_lane_status:
             lanes.append(l)
             continue
-        if "满" in code or "封锁" in code or "超占" in code:
+        if fill == 0 and ("满仓" in code or "封锁" in code or "超占" in code):
             lanes.append(l)
     return {"location_id": location_id, "lanes": lanes}
 

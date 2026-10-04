@@ -5,7 +5,9 @@ const lanes = ref<any[]>([])
 onMounted(async () => {
   const ticket = await api('/refills/latest?location_id=1')
   const body = await api('/refills/full?location_id=1')
-  const extra = (ticket.lines || []).filter((l: any) => Number(l.fill_qty) === 0)
+  // 以后端满仓页为准；只合并小票上 status=full 的行做兜底。
+  // 同品合计触顶（sku_cap_full）、超占等零补量行不是单道满仓，不得并入。
+  const extra = (ticket.lines || []).filter((l: any) => l.status === 'full')
   const map = new Map((body.lanes || []).map((l: any) => [l.lane_id, l]))
   for (const l of extra) map.set(l.lane_id, l)
   lanes.value = Array.from(map.values())

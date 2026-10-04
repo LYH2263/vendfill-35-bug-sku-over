@@ -59,6 +59,23 @@ def test_cap_must_be_positive_and_state_unchanged(client):
     assert next(l for l in data["lines"] if l["slot_no"] == "B1")["fill_qty"] == 7
 
 
+@pytest.mark.parametrize("bad", [3.5, 3.0, "3", True, False, None, 1.0])
+def test_cap_rejects_non_integer_types_and_keeps_prior_config(client, bad):
+    loc_id = _make_location([("B1", "薯片", 12, 3, 2)])
+    # 先登记一个合法值
+    assert _put_cap(client, loc_id, "薯片", 6).status_code == 200
+    # 各种非正整数类型一律 400
+    r = client.put(f"/api/locations/{loc_id}/caps/薯片", json={"cap": bad})
+    assert r.status_code == 400, (bad, r.status_code, r.text)
+    # 配置停在改前的合法值，未被污染
+    caps = client.get(f"/api/locations/{loc_id}/caps").json()
+    assert caps == [{"id": caps[0]["id"], "location_id": loc_id, "sku_name": "薯片", "cap": 6}]
+    # 新商品名的非法登记也不得写入
+    r = client.put(f"/api/locations/{loc_id}/caps/可乐", json={"cap": bad})
+    assert r.status_code == 400
+    assert client.get(f"/api/locations/{loc_id}/caps").json() == caps
+
+
 def test_upsert_persists_and_regenerate_follows_new_cap(client):
     loc_id = _make_location([("B1", "薯片", 12, 3, 2)])  # 缺口 7
     assert _put_cap(client, loc_id, "薯片", 5).status_code == 200

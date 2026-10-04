@@ -1,3 +1,5 @@
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -7,7 +9,16 @@ from app.models.models import Location, SkuCap
 router = APIRouter(prefix="/locations", tags=["locations"])
 
 class CapIn(BaseModel):
-    cap: int
+    # 收原始值手动校验：JSON 的 3.0 是 float、"3" 是 str、true 是 bool，
+    # 均属非法，统一在写库前以 400 拒绝，保证配置与单据停在改前。
+    cap: Any
+
+
+def _valid_cap(value: Any) -> int:
+    # bool 是 int 的子类，必须先排除
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise HTTPException(400, "合计补量上限必须为正整数")
+    return value
 
 def _cap_out(c: SkuCap) -> dict:
     return {"id": c.id, "location_id": c.location_id, "sku_name": c.sku_name, "cap": c.cap}
@@ -27,15 +38,14 @@ def list_caps(location_id: int, db: Session = Depends(get_db)):
 @router.put("/{location_id}/caps/{sku_name}")
 def upsert_cap(location_id: int, sku_name: str, body: CapIn, db: Session = Depends(get_db)):
     if not db.get(Location, location_id): raise HTTPException(404, "点位不存在")
-    if body.cap <= 0:
-        # 上限≤0 的登记拒绝，配置与单据保持改前
-        raise HTTPException(400, "合计补量上限必须为正整数")
+    # 先校验，任何非法值都在写库前拒绝：配置与单据保持改前
+    cap_value = _valid_cap(body.cap)
     cap = db.scalars(select(SkuCap).where(SkuCap.location_id == location_id,
                                           SkuCap.sku_name == sku_name)).first()
     if cap:
-        cap.cap = body.cap
+        cap.cap = cap_value
     else:
-        cap = SkuCap(location_id=location_id, sku_name=sku_name, cap=body.cap)
+        cap = SkuCap(location_id=location_id, sku_name=sku_name, cap=cap_value)
         db.add(cap)
     db.commit(); db.refresh(cap)
     return _cap_out(cap)
