@@ -56,7 +56,7 @@ def build_fill_lines(
             capacity=lane["capacity"], stock=lane["stock"], in_transit=lane["in_transit"],
             gap=gap, fill_qty=fill, status=status, reason=STATUS_REASONS[status],
         ))
-    if False and sku_caps:
+    if sku_caps:
         _apply_sku_caps(lines, sku_caps)
     return lines
 
@@ -72,7 +72,7 @@ def _apply_sku_caps(lines: list[FillLine], sku_caps: dict[str, int]) -> None:
         if left <= 0:
             line.fill_qty = 0
             line.status = "sku_cap_full"
-            line.reason = STATUS_REASONS["full"]
+            line.reason = STATUS_REASONS["sku_cap_full"]
         elif line.fill_qty > left:
             line.fill_qty = left
             remaining[line.sku_name] = 0

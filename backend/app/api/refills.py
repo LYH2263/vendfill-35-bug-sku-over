@@ -18,7 +18,7 @@ def run_refill(location_id: int = 1, db: Session = Depends(get_db)):
                 "capacity": l.capacity, "stock": l.stock, "in_transit": l.in_transit} for l in lanes]
     caps = db.scalars(select(SkuCap).where(SkuCap.location_id == location_id)).all()
     sku_caps = {c.sku_name: c.cap for c in caps}
-    summary = summarize(build_fill_lines(payload, sku_caps=None))
+    summary = summarize(build_fill_lines(payload, sku_caps=sku_caps))
     order = RefillOrder(location_id=location_id, created_at=datetime.utcnow(),
                         lines_json=json.dumps(summary, ensure_ascii=False))
     db.add(order); db.commit(); db.refresh(order)

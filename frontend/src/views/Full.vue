@@ -5,7 +5,9 @@ const lanes = ref<any[]>([])
 onMounted(async () => {
   const ticket = await api('/refills/latest?location_id=1')
   const body = await api('/refills/full?location_id=1')
-  const extra = (ticket.lines || []).filter((l: any) => Number(l.fill_qty) === 0)
+  const extra = (ticket.lines || []).filter(
+    (l: any) => Number(l.fill_qty) === 0 && l.status !== 'sku_cap_full',
+  )
   const map = new Map((body.lanes || []).map((l: any) => [l.lane_id, l]))
   for (const l of extra) map.set(l.lane_id, l)
   lanes.value = Array.from(map.values())

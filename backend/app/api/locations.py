@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, StrictInt
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -7,7 +7,9 @@ from app.models.models import Location, SkuCap
 router = APIRouter(prefix="/locations", tags=["locations"])
 
 class CapIn(BaseModel):
-    cap: int
+    # StrictInt：布尔、小数（含 5.0）、数字字符串一律拒绝（422），
+    # 由端点再拒 ≤0（400）；非法输入不落库，配置与单据保持改前。
+    cap: StrictInt
 
 def _cap_out(c: SkuCap) -> dict:
     return {"id": c.id, "location_id": c.location_id, "sku_name": c.sku_name, "cap": c.cap}

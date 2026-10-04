@@ -16,10 +16,15 @@ async function saveCap() {
   err.value = ''
   const sku = skuName.value.trim()
   if (!sku) { err.value = '请填写商品名'; return }
+  const cap = Number(capVal.value)
+  if (!Number.isInteger(cap) || cap <= 0) {
+    err.value = '合计补量上限必须为正整数（配置与单据保持改前）'
+    return
+  }
   try {
     await api(`/locations/${activeLoc.value}/caps/${encodeURIComponent(sku)}`, {
       method: 'PUT',
-      body: JSON.stringify({ cap: Number(capVal.value) }),
+      body: JSON.stringify({ cap }),
     })
     skuName.value = ''
     capVal.value = null
